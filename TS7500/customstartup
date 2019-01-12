@@ -1,0 +1,25 @@
+#! /bin/sh
+ # /etc/init.d/customstartup
+ # Required-Start: $all
+ 
+ case "$1" in
+   start)
+     # /usr/local/bin/ts7500ctl --redledon #LED is used in web script as indicator
+     ## If you are launching a daemon or other long running processes
+     ## this should be started with
+     # nohup /usr/local/bin/yourdaemon &
+     # Web-Server Start
+     echo "Starting Home Automation Web Server..."
+     python /home/homeautomation/manage.py runserver 192.168.1.15:80
+     echo "(!) Server Closed!"
+     ;;
+   stop)
+     /usr/local/bin/ts7500ctl --redledoff
+     ;;
+   *)
+     echo "Usage: customstartup start|stop" >&2
+     exit 3
+     ;;
+ esac
+ 
+ exit 0
