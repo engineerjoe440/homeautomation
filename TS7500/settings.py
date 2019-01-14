@@ -7,6 +7,7 @@
 
 import os
 from ts7500 import * # Import control functions for TS7500
+from django import forms
 from django.conf.urls.defaults import url
 from django.http import HttpResponse
 from django.template.loader import render_to_string
@@ -35,22 +36,31 @@ btn2 = file_obj.readline()
 btn3 = file_obj.readline()
 file_obj.close()
 
+# Display Unauthorized Access Warning Page
+def warning():
+	warnhtml = render_to_string('warning.html') # Render Warning HTML page
+	print("WARNING: Unauthorized or erroneous access attempt!")
+	return(HttpResponse(warnhtml))
+
 # Main Web Interaction Function
 def home(request):
-	warnhtml = render_to_string('warning.html')
-	if(request.GET.get('B1')):
-		rly_toggle( RELAY[1] )
-	elif(request.GET.get('B2')):
-		rly_toggle( RELAY[2] )
-	elif(request.GET.get('B3')):
-		rly_toggle( RELAY[3] )
-	else:
+	if ( request.method == 'POST' ):
+		# POST method is being used!
+		if 'B1' in request.POST:
+			rly_toggle( RELAY[1] )
+		elif 'B2' in request.POST:
+			rly_toggle( RELAY[2] )
+		elif 'B3' in request.POST:
+			rly_toggle( RELAY[3] )
+		else:
+			# Unauthorized Access Attempt - Faulty POST
+			return( warning() )
+	elif(request.method == 'GET' ):
 		if(request.GET.urlencode() != ''):
-			print("WARNING: Unauthorized or erroneous access attempt!")
-			return(HttpResponse(warnhtml))
+			return( warning() )
 	r1, r2, r3 = rly_parse() # Retrieve new status
 	html = render_to_string('homauto.html', {'B1name': btn1, 'R1sta': r1,
-	'B2name': btn2, 'R2sta': r2, 'B3name': btn3, 'R3sta': r3})
+	'B2name': btn2, 'R2sta': r2, 'B3name': btn3, 'R3sta': r3}) # Render main HTML
 	return HttpResponse(html)
 
 

@@ -54,20 +54,36 @@ def control(output):
 		print("WARNING: Unexpected function call.\nValue outside of range [1,3].")
 	print(output)
 
+# Display Unauthorized Access Warning Page
+def warning():
+	warnhtml = render_to_string('warning.html') # Render Warning HTML page
+	print("WARNING: Unauthorized or erroneous access attempt!")
+	return(HttpResponse(warnhtml))
+
+# Main Web Interaction Function
 def home(request):
-	html = render_to_string('homauto.html', {'B1name': btn1,
-	'B2name': btn2, 'B3name': btn3})
-	warnhtml = render_to_string('warning.html')
-	if(request.GET.get('B1')):
-		control(1)
-	elif(request.GET.get('B2')):
-		control(2)
-	elif(request.GET.get('B3')):
-		control(3)
+	if ( request.method == 'POST' ):
+		# POST method is being used!
+		if 'B1' in request.POST:
+			#rly_toggle( RELAY[1] )
+			i = 1
+			print(i)
+		elif 'B2' in request.POST:
+			#rly_toggle( RELAY[2] )
+			i = 2
+		elif 'B3' in request.POST:
+			#rly_toggle( RELAY[3] )
+			i = 3
+		else:
+			# Unauthorized Access Attempt - Faulty POST
+			return( warning() )
 	else:
+		print("hi")
 		if(request.GET.urlencode() != ''):
-			print("WARNING: Unauthorized or erroneous access attempt!")
-			return(HttpResponse(warnhtml))
+			return( warning() )
+	r1, r2, r3 = 'OFF', 'OFF', 'OFF' #rly_parse() # Retrieve new status
+	html = render_to_string('homauto.html', {'B1name': btn1, 'R1sta': r1,
+	'B2name': btn2, 'R2sta': r2, 'B3name': btn3, 'R3sta': r3}) # Render main HTML
 	return HttpResponse(html)
 
 
