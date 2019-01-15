@@ -10,8 +10,9 @@ import os
 # Control Directory:
 ctr7500 = "/usr/local/bin/ts7500ctl"
 
-# Relay Dictionary:
+# Connection/Pin Dictionarys:
 RELAY = { 1:35, 2:37, 3:39 }
+DIO_PIN = { 1:40, 2:38, 3:36, 4:34, 5:32, 6:30, 7:28, 8:26 }
 
 # Retrieve Current Status of Relays
 def rly_sta():
@@ -63,3 +64,11 @@ def rly_parse():
 	R2 = txt[ ((c_sta >> 37) & 0x1) ]
 	R3 = txt[ ((c_sta >> 39) & 0x1) ]
 	return(R1,R2,R3)
+	
+# DIO Pin Status
+def get_dio( pin ):
+	c_sta = rly_sta()
+	sta = ((c_sta >> pin) & 0x1)
+	return( sta )
+
+# End of file

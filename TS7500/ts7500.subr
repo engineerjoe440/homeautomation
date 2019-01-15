@@ -1,0 +1,791 @@
+warn1="WARNING: do NOT power-down while saving/copying!"
+img="[kernel+initrd]"
+
+# ----------------------------------------------------------
+# Display the given number in binary format
+printbin() {
+# NOTE: assume only 7 digits, since getdio() only seem to give 7
+#       will only print the first 7 digits either way
+
+	digits="1 2 3 4 5 6 7"
+	# Loop thru the given hex digits
+	for digit in $digits; do
+		num=`echo $1 | cut -c${digit}`
+		if 	[ "$num" = "a" ]; then num="10"
+		elif 	[ "$num" = "b" ]; then num="11"
+		elif 	[ "$num" = "c" ]; then num="12"
+		elif 	[ "$num" = "d" ]; then num="13"
+		elif 	[ "$num" = "e" ]; then num="14"
+		elif 	[ "$num" = "f" ]; then num="15"
+		fi
+
+		# Loop thru the 4 binary digits:
+		# AND with 0x8 to get the MSB, display it
+		# SHIFT left, do the next digit
+		loops="1 2 3 4 "
+		for loop in $loops; do
+			bin=$((num&0x8));
+			if [ "$bin" = "0" ]; then 
+				echo -n "0"
+			else 
+				echo -n "1" 
+			fi
+			num=$((num<<1))
+		done
+		echo -n " "	
+	done	
+	# echo	
+}
+
+
+cvtime() {
+	local x sec tenths
+	let x=`devmem 0x79000040`
+	sec=$((x / 100000))
+	tenths=$((x % 100000 / 1000))
+	printf "%d.%02d" $sec $tenths
+	
+# Return the value read from mem
+return $x
+}
+
+
+usbload() {
+	mount -t tmpfs tmpfs /lib/modules
+	tar -x -z -f /modules.tar.gz -C /
+	modprobe scsi_mod
+	modprobe sd_mod
+	modprobe usbcore
+	modprobe ehci_hcd
+	modprobe usb_storage
+	umount /lib/modules
+}
+
+
+save() {
+	# Determine the boot device used:
+	# 	media		dev
+	#--------------------
+	# NAND/SPI-0	0 (NOTE: must determine model also!)
+	# mSD			1
+	# SPI-1			2
+	#--------------------
+	# 
+	local dev=`ts7500ctl -i | grep bootdev | cut -d= -f2 | cut -c3-`
+	if [ $dev -eq 0 ]; then
+		# Determine the model
+		local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+		if [ $model -eq 7500 ]; then
+			flashsave
+		else
+			nandsave
+		fi
+	elif [ $dev -eq 1 ]; then
+		sdsave
+	elif [ $dev -eq 2 ]; then
+		flash1save
+	fi
+}
+
+
+sdsave() {
+	echo "$warn1"
+	echo -n "Saving [initrd] to mSD ... "
+	mount -o remount,ro /
+	sdctl -W 32 -k initrd -z 65536 -i /dev/ram0 >/dev/null 2>&1
+	mount -o remount,rw /
+	echo "done"
+}
+
+
+nandsave() {
+	echo "$warn1"
+	echo -n "Saving [initrd] to NAND ... "
+	mount -o remount,ro /
+	nandctl -W 16 -k part2 -z 131072 -X -i /dev/ram0 >/dev/null 2>&1
+	mount -o remount,rw /
+	echo "done"
+}
+
+
+flashsave() {
+# Determine the model
+# If this is NOT a 7500, skip
+local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+if [ "$model" -ne 7500 ]; then
+	echo "TS-${model} does NOT have ON-board FLASH -- ABORTING"
+	echo "('flash1save' = save to OFF-board FLASH)"
+	echo "('nandsave'   = save to NAND)"
+	return
+fi
+
+	echo "$warn1"
+	echo -n "Saving [initrd] to ON-board FLASH ... "
+	mount -o remount,ro /
+	spiflashctl -W 32 -k part2 -z 65536 -i /dev/ram0 > /dev/null 2>&1
+	mount -o remount,rw /
+	echo "done"
+}
+
+
+flash1save() {
+	echo "$warn1"
+	echo -n "Saving [initrd] to OFF-board FLASH ... "
+	mount -o remount,ro /
+	spiflashctl -l 1 -W 32 -k part2 -z 65536 -i /dev/ram0 > /dev/null 2>&1
+	mount -o remount,rw /
+	echo "done"
+}
+
+
+flashallsave() {
+	flashsave
+	flash1save
+}
+	
+
+# ----------------------------------------------------------
+# Copy from micro SD
+sd2flash() {
+# Determine the model
+# If this is a 7550 or 7551, skip (NO micro SD on these boards)
+local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+if [ "$model" -eq 7550 -o $model -eq 7551 ]; then
+	echo "TS-${model} does NOT have micro SD -- ABORTING"
+	echo "(Try: flash2flash, nand2flash)"
+	return
+fi
+
+	echo "$warn1"
+	echo -n "Copying $img mSD --> ON-board FLASH ..."
+	sdctl -R 32 -z 65536 -k part2 > /tmp/image 2>/dev/null
+	spiflashctl -W 32 -z 65536 -k part1 -i /tmp/image > /dev/null 2>&1
+	rm /tmp/image
+	wait
+	
+	sdctl -R 32 -z 65536 -k part3 > /tmp/image 2>/dev/null
+	spiflashctl -W 32 -z 65536 -k part2 -i /tmp/image > /dev/null 2>&1
+	rm /tmp/image
+	echo "done"
+}
+
+sd2flash1() {
+# Determine the model
+# If this is a 7550 or 7551, skip (NO micro SD on these boards)
+local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+if [ "$model" -eq 7550 -o $model -eq 7551 ]; then
+	echo "TS-${model} does NOT have micro SD -- ABORTING"
+	echo "(Try: flash2flash, nand2flash)"
+	return
+fi
+
+	echo "$warn1"
+	echo -n "Copying $img mSD --> OFF-board FLASH ..."
+	sdctl -R 32 -z 65536 -k part2 > /tmp/image 2>/dev/null
+	spiflashctl -l 1 -W 32 -z 65536 -k part1 -i /tmp/image > /dev/null 2>&1
+	rm /tmp/image
+	wait
+	
+	sdctl -R 32 -z 65536 -k part3 > /tmp/image 2>/dev/null
+	spiflashctl -l 1 -W 32 -z 65536 -k part2 -i /tmp/image > /dev/null 2>&1
+	rm /tmp/image
+	echo "done"
+}
+
+
+sd2nand() {
+# Determine the model
+# If this is a 7550 or 7551, skip (NO micro SD on these boards)
+local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+if [ "$model" -eq 7550 -o "$model" -eq 7551 ]; then
+	echo "TS-${model} does NOT have micro SD -- ABORTING"
+	echo "(Try: flash2nand)"
+	return
+fi
+
+	echo "$warn1"
+	echo -n "Copying $img mSD --> NAND ... "
+	sdctl -R 32 -z 65536 -k part2 > /tmp/image 2>/dev/null
+	nandctl -W 16 -z 131072 -k part1 -X -i /tmp/image > /dev/null 2>&1
+	# sdctl -R 4095 -z 512 -k kernel > /tmp/image 2>/dev/null
+	# nandctl -W 4095 -z 512 -k kernel -X -i /tmp/image > /dev/null 2>&1
+	rm /tmp/image
+	wait
+	
+	sdctl -R 32 -z 65536 -k part3 > /tmp/image 2>/dev/null
+	nandctl -W 16 -z 131072 -k part2 -X -i /tmp/image >/dev/null 2>&1
+	rm /tmp/image
+	echo "done"
+}
+
+# ----------------------------------------------------------
+# Copy from FLASH
+flash2flash() {
+# Determine the model
+# If this is NOT a 7500, skip (only the 7500 has ON-board FLASH)
+local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+if [ "$model" -ne 7500 ]; then
+	echo "TS-${model} does NOT have ON-board FLASH -- ABORTING"
+	echo "(Try: sd2flash, nand2flash)"
+	return
+fi
+
+	# Determine the boot media, so we can copy from there
+	local dev=`ts7500ctl -i | grep bootdev | cut -d= -f2 | cut -c3-`
+	echo "$warn1"
+	if [ $dev -eq 0 ]; then
+		echo -n "Copying $img ON-board FLASH --> OFF-board FLASH ... "
+		spiflashctl -R 64 -z 65536 > /tmp/image 2>/dev/null
+		spiflashctl -l 1 -W 64 -z 65536 -i /tmp/image > /dev/null 2>&1
+	elif [ $dev -eq 2 ]; then
+		echo -n "Copying $img OFF-board FLASH --> ON-board FLASH ... "
+		spiflashctl -l 1 -R 64 -z 65536 > /tmp/image 2>/dev/null
+		spiflashctl -W 64 -z 65536 -i /tmp/image > /dev/null 2>&1
+	fi
+
+	rm /tmp/image
+	echo "done"
+}
+
+
+flash2sd() {
+# Determine the model
+# If this is a 7550 or 7551, skip (NO micro SD on these boards)
+local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+if [ "$model" -eq 7550 -o $model -eq 7551 ]; then
+	echo "TS-${model} does NOT have micro SD -- ABORTING"
+	return
+fi
+
+	# Determine the boot media, so we can copy from there
+	local dev=`ts7500ctl -i | grep bootdev | cut -d= -f2 | cut -c3-`
+	# Assume FLASH-0
+	local lun=""
+	local flash="ON-board"
+	if [ $dev -eq 2 ]; then
+		lun="-l 1"
+		flash="OFF-board"
+	fi
+	
+	echo "$warn1"
+	echo -n "Copying $img $flash FLASH --> mSD ... "
+	spiflashctl ${lun} -R 32 -z 65536 -k part1 > /tmp/image 2>/dev/null
+	sdctl -W 32 -z 65536 -k part2 -i /tmp/image >/dev/null 2>&1
+	rm /tmp/image
+	wait
+	
+	spiflashctl ${lun} -R 32 -z 65536 -k part2 > /tmp/image 2>/dev/null
+	sdctl -W 32 -z 65536 -k part3 -i /tmp/image >/dev/null 2>&1
+	rm /tmp/image
+	echo "done"
+}
+
+
+flash2nand() {
+# Determine the model
+# If this is a 7500, skip (NO NAND on this board)
+local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+if [ "$model" -eq 7500 ]; then
+	echo "TS-${model} does NOT have NAND -- ABORTING"
+	echo "(Try: flash2flash, flash2sd)"
+	return
+fi
+
+	echo "$warn1"
+	echo -n "Copying $img OFF-board FLASH --> NAND ... "
+	spiflashctl -l 1 -R 64 -z 65536 > /tmp/image 2>/dev/null
+	nandctl -W 32 -z 131072 -X -i /tmp/image > /dev/null 2>&1
+	rm /tmp/image
+	echo "done"
+}
+
+
+# ----------------------------------------------------------
+# Copy from NAND
+nand2flash() {
+# Determine the model
+# If this is a 7500, skip (NO NAND on this board)
+local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+if [ "$model" -eq 7500 ]; then
+	echo "TS-${model} does NOT have NAND -- ABORTING"
+	echo "(Try: flash2flash, sd2flash)"
+	return
+fi
+
+	echo "$warn1"
+	echo "Copying $img NAND --> OFF-board FLASH ... "
+	nandctl -R 32 -z 131072 -X > /tmp/image 2>/dev/null
+	spiflashctl -l 1 -W 64 -z 65536 -i /tmp/image > /dev/null 2>&1
+	rm /tmp/image
+	echo "done"
+}
+
+
+nand2sd() {
+# Determine the model
+# If this is a 7550 or 7551, skip (NO micro SD on these boards)
+local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+if [ "$model" -eq 7550 -o "$model" -eq 7551 ]; then
+	echo "TS-${model} does NOT have micro SD -- ABORTING"
+	echo "(Try: nand2flash)"
+	return
+fi
+
+	echo "$warn1"
+	echo "Copying $img NAND --> mSD ... "
+	nandctl -R 16 -z 131072 -k part1 -X > /tmp/image 2>/dev/null
+	sdctl -W 32 -z 65536 -k part2 -i /tmp/image >/dev/null 2>&1
+	rm /tmp/image
+	wait
+	
+	nandctl -R 16 -z 131072 -k part2 -X > /tmp/image 2>/dev/null
+	sdctl -W 32 -z 65536 -k part3 -i /tmp/image >/dev/null 2>&1
+	rm /tmp/image
+	echo "done"
+}
+
+
+recover() {
+# 'Un-brick" a board
+# [try to] copy the kernel/initrd images from the boot device to ...
+
+# Scenarios:
+# Model	Boot		Recover
+#==============================
+# 7500	FLASH-1	(2)	FLASH-0/mSD
+# 7500	FLASH-0	(0)	mSD
+# 7500	mSD		(1)	FLASH-0
+# 7550	FLASH-1	(2)	NAND
+# 7550	NAND	(0)	-----
+# 7551	FLASH-1	(2)	NAND
+# 7551	NAND	(0)	-----
+# 7552	FLASH-1	(2)	NAND/mSD
+# 7552	mSD		(1)	NAND
+# 7552	NAND	(0)	mSD
+# 7553	FLASH-1	(2)	NAND/mSD
+# 7553	mSD		(1)	NAND
+# 7553	NAND	(0)	mSD
+
+# 	media		dev
+#--------------------
+# NAND/FLASH-0	0 (NOTE: must determine model also!)
+# mSD		1
+# FLASH-1	2
+#--------------------
+# 
+	# Determine the boot device and model
+	local dev=`ts7500ctl -i | grep bootdev | cut -d= -f2 | cut -c3-`
+	local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+	local device
+	if [ $dev -eq 0 ]; then
+		if [ $model -eq 7500 ]; then
+			device="ONboard FLASH"
+		else
+			device="NAND"
+		fi
+	elif [ $dev -eq 1 ]; then
+		device="micro SD"
+	elif [ $dev -eq 2 ]; then
+		device="OFFboard FLASH"
+	fi
+	
+	echo "(TS-${model}, booted from ${device}) "
+
+	# Determine what to recover
+	# 7500
+	if [ $model -eq 7500 ]; then
+		# from FLASH-1 --> FLASH-0/mSD
+		if [ $dev -eq 2 ]; then
+			echo -n "Recover FLASH-0 ? --> [y/n]: "
+			read ans
+			if [ "$ans" = "y" ]; then
+				flash2flash
+			fi
+			echo -n "Recover micro SD ? --> [y/n]: "
+			read ans
+			if [ "$ans" = "y" ]; then
+				flash2sd
+			fi
+		# from FLASH-0 --> mSD
+		elif [ $dev -eq 0 ]; then
+			echo -n "Recover micro SD ? --> [y/n]: "
+			read ans
+			if [ "$ans" = "y" ]; then
+				flash2sd
+			fi
+		# from mSD --> FLASH-0
+		elif [ $dev -eq 1 ]; then
+			echo -n "Recover FLASH-0 ? --> [y/n]: "
+			read ans
+			if [ "$ans" = "y" ]; then
+				sd2flash
+			fi
+		fi
+	# 7550/7551
+	elif [ $model -eq 7550 -o $model -eq 7551 ]; then
+		# from FLASH-1 --> NAND
+		if [ $dev -eq 2 ]; then
+			echo -n "Recover NAND ? --> [y/n]: "
+			read ans
+			if [ "$ans" = "y" ]; then
+				flash2nand
+			fi
+		# from NAND --> nothing to recover!
+		elif [ $dev -eq 0 ]; then
+			echo "NOTHING to recover -- try \"nand2flash\""
+		fi
+	# 7552/7553
+	elif [ $model -eq 7552 -o $model -eq 7553 ]; then
+		# from FLASH-1 --> NAND/mSD
+		if [ $dev -eq 2 ]; then
+			echo -n "Recover NAND ? --> [y/n]: "
+			read ans
+			if [ "$ans" = "y" ]; then
+				flash2nand
+			fi
+			echo -n "Recover micro SD ? --> [y/n]: "
+			read ans
+			if [ "$ans" = "y" ]; then
+				flash2sd
+			fi
+		# from mSD --> NAND
+		elif [ $dev -eq 1 ]; then
+			echo -n "Recover NAND ? --> enter [y/n]: "
+			read ans
+			if [ "$ans" = "y" ]; then
+				sd2nand
+			fi
+		# from NAND --> mSD
+		elif [ $dev -eq 0 ]; then
+			echo -n "Recover micro SD ? --> enter [y/n]: "
+			read ans
+			if [ "$ans" = "y" ]; then
+				nand2sd
+			fi
+		fi
+	fi
+}
+
+
+#Usage: setdiopin <pin> <1,0,Z> <b>
+# Second arg:
+#	1= ON, 0= OFF, z= input mode
+# Third arg:
+#	if present, print DIO reg in binary
+setdiopin() {
+	if [ -z "$dio_out" ]; then
+		eval `ts7500ctl --getdioreg`
+	fi
+	case $2 in
+	0)
+		let diodir="diodir | (1<<$1)"
+		let dio_out="dio_out & ~(1<<$1)"
+		;;
+	1)
+		let diodir="diodir | (1<<$1)"
+		let dio_out="dio_out | (1<<$1)" 
+		;;
+	z|Z)
+		let diodir="diodir & ~(1<<$1)"
+		;;
+	esac
+	ts7500ctl --setdio $dio_out --setdiodir $diodir
+	
+	if [ "$3" = "b" ]; then
+		local dir=`ts7500ctl --getdioreg | grep diodir | cut -dx -f2`
+		echo -n "DIR= "
+		printbin $dir
+		echo
+		local out=`ts7500ctl --getdioreg | grep dio_out | cut -dx -f2`
+		echo -n "OUT= "
+		printbin $out
+		echo
+	fi
+	#return $dionum
+}
+
+
+#Usage: getdiopin <pin>
+getdiopin() {
+	local x dio
+	eval `ts7500ctl --getdio`
+	let x="(dio >> $1) & 0x1"
+	echo $x
+	return $x
+}
+
+
+#TS-752 utility functions
+setrelay() {
+	local x
+	let x="$1"
+	setdiopin 39 $((x & 0x1))
+	setdiopin 37 $(((x >> 1) & 0x1)) 
+	setdiopin 35 $(((x >> 2) & 0x1)) 
+
+# Return the value given
+# NOTE: maybe we can return the ACTUAL relay status?-JW
+return $x	
+}
+
+
+setpwm() {
+	local x
+	if [ "$model" = "0x7558" ]; then
+		daqctl --pwm $1:$2
+	else
+	        let x=$1
+	        let x="x*375"
+		winpoke16 0x20000 0x213f
+		winpoke16 0x6 0x0800
+		winpoke16 0x20004 0x1
+		winpoke16 0x20002 $x
+	fi
+}
+
+
+setout() {
+	local i x
+	let x="$1"
+	if [ "$model" = "0x7558" ]; then
+		i=0
+		while [ $i -ne 7 ]; do
+			case $(((x >> i) & 0x1)) in
+			0) setpwm $i 0 ;;
+			1) setpwm $i 100% ;;
+			esac
+			i=$((i + 1))
+		done
+
+	else
+		setdiopin 33 $((x & 0x1))
+		setdiopin 31 $(((x >> 1) & 0x1)) 
+		setdiopin 29 $(((x >> 2) & 0x1)) 
+	fi
+	return $x
+}
+
+
+getin() {
+	local x dio
+	if [ "$model" = "0x7558" ]; then
+		eval `daqctl --single`
+		printf "0x%x\n" $chan10_value
+		return $chan10_value
+	else
+		eval `ts7500ctl --getdio`
+		let x="(dio >> 40) & 1"
+		let x="x | (((dio >> 36) & 1) << 2)"
+		let x="x | (((dio >> 34) & 1) << 3)"
+		let x="x | (((dio >> 32) & 1) << 4)"
+		let x="x | (((dio >> 30) & 1) << 5)"
+		let x="x | (((dio >> 28) & 1) << 6)"
+		let x="x | (((dio >> 26) & 1) << 7)"
+		if [ -z "$1" ]; then
+			printf "0x%x\n" $x
+			return $x
+		else
+			echo $(((x >> ($1 - 1)) & 1))
+			return $(((x >> ($1 - 1)) & 1)) 
+		fi
+	fi
+}
+
+
+getadc() {
+	local n x
+	eval `daqctl --single`
+	n=$1
+	case $1 in
+	AD*) n=${n#AD*}; n=$((n + 3)) ;;
+	esac
+	eval "x=\$chan${n}_value"
+	printf "0x%x\n" $x
+} 
+
+
+tshelp() {
+	echo "usbload:"
+	echo -e "\tLoad USB kernel drivers"
+	echo "setdiopin <pin> <1,0,Z> <b>:"
+	echo -e "\tSet DIO header pin 1-44 (b=dump binary)"
+	echo "getdiopin <pin>:"
+	echo -e "\tGet DIO input state"
+	echo "setrelay <val>:"
+	echo -e "\tTurn on/off TS-752 relays according to 3-bit val"
+	echo "setout <val>:"
+	echo -e "\tSet 3-bit (TS-752) or 7-bit (TS-7558) output val"
+	echo "setpwm <chans> <pwmval>:"
+	echo -e "\tSet TS-7558 PWM outputs"
+	echo "getin:"
+	echo -e "\tReturn TS-752 or TS-7558 inputs"
+	echo "getadc <chan>:"
+	echo -e "\tReturn TS-7558 ADC channel 0-3"
+	echo "gettemp:"
+	echo -e "\tReturn Temp. Sensor reading"
+	echo "save:"
+	echo -e "\tSave initrd back to boot device (NANS, SD or SPI flash)"
+	echo "sd2nand/nand2sd, sd2flash/flash2sd, nand2flash/flash2nand, etc:"
+	echo -e "\tCopy kernel+initrd images from one media to another"
+	echo "recover:"
+	echo -e "\tRecover kernel+initrd images"
+	echo "sbcTest:"
+	echo -e "\tRun TS production tests (NOTE: need loop-back testers)"
+	if [ -f /mnt/root/boot/zImage-2.6.36-ts ]; then
+		echo "updatekernel:"
+		echo -e "\tUpdate booted device to use kernel 2.6.36"
+	fi
+	echo "exit:" 
+	echo -e "\tBoot SD card (if present) or filesystem mounted at /mnt/root"
+}
+
+updatekernel() {
+	if [ ! -f /mnt/root/boot/zImage-2.6.36-ts ]; then
+		echo "Kernel update files not found in /mnt/root/boot!"
+		return
+	fi
+	dd if=/mnt/root/boot/zImage-2.6.36-ts of=/tmp/zimg bs=64k conv=sync >/dev/null 2>&1
+	eval `ts7500ctl -i 2>&1`
+	echo -n "Writing new 2.6.36 kernel "
+	if [ "$bootdev" = "0x0" ]; then
+		if [ "$model" = "0x7500" ]; then
+			echo -n "to onboard SPI flash..."
+			spiflashctl --lun 0 -k kernel -z 65536 -i /tmp/zimg >/dev/null 2>&1
+		else
+			echo -n "to onboard NAND flash..."
+			dd if=/tmp/zimg of=/dev/nbd1 >/dev/null 2>&1 
+		fi
+	elif [ "$bootdev" = "0x1" ]; then
+		echo -n "to mSD ..."
+		dd if=/tmp/zimg of=/dev/nbd7 >/dev/null 2>&1 
+	else 
+		echo -n "to offboard SPI flash ..."
+		spiflashctl --lun 1 -k kernel -z 65536 -i /tmp/zimg >/dev/null 2>&1
+	fi
+	rm /tmp/zimg
+	sync
+	echo "done"
+	cp /mnt/root/boot/modules-initrd.tar.gz /modules.tar.gz
+	save
+}
+
+
+gettemp() {
+# Determine the board model
+# If 7500 or 7550, use local function
+# For all other boards, use "ts7500ctl --gettemp"
+local model=`ts7500ctl -i | grep "^model=" | cut -d= -f2 | cut -c3-`
+if [ "$model" -ne 7500 -a $model -ne 7550 ]; then
+	eval `ts7500ctl --gettemp`
+	echo $temperature
+	return
+fi
+
+	local n x val
+	setdiopin 22 0
+	setdiopin 12 Z
+	n=0
+	while [ $n -lt 13 ]; do
+		setdiopin 14 0
+		setdiopin 14 1
+		x=`getdiopin 12`
+		if [ "$x" -eq 0 ]; then
+			let val="val << 1"
+		else
+			let val="(val << 1) | 1"
+		fi
+		let n="n + 1"
+	done
+	setdiopin 22 Z
+	setdiopin 14 Z
+	if [ $((val & 0x1000)) -ne 0 ]; then
+		val=$(((~(val & 0xfff) & 0xfff) + 1))
+		val=$((val * 62500))
+		printf "-%d." $((val / 1000000))
+		printf "%d\n" $(((val % 1000000) / 100000))
+	else
+		val=$((val * 62500))
+		printf "%d." $((val / 1000000))
+		printf "%d\n" $(((val % 1000000) / 100000))
+	fi
+	
+	return $val
+}
+
+
+winpoke16() {
+	local x
+
+	let x=$1
+	x=$((x >> 11))
+	ts7500ctl -a 0x18 -w $x
+	let x=$1
+	let x="(x & 0x7ff) | 0x8000"
+	ts7500ctl -a 0x1a -w $x
+	ts7500ctl -a 0x1c -w $2
+}
+
+
+winpeek16() {
+	local x
+
+	let x=$1
+	x=$((x >> 11))
+	ts7500ctl -a 0x18 -w $x
+	let x=$1
+	let x="(x & 0x7ff) | 0x8000"
+	ts7500ctl -a 0x1a -w $x
+	ts7500ctl -a 0x1c -r
+}
+
+
+winpoke8() {
+	local x
+
+	let x=$1
+	x=$((x >> 11))
+	ts7500ctl -a 0x18 -w $x
+	let x=$1
+	let x="(x & 0x7ff) | 0xc000"
+	ts7500ctl -a 0x1a -w $x
+	ts7500ctl -a 0x1c -w $2
+}
+
+
+winpeek8() {
+	local x
+
+	let x=$1
+	x=$((x >> 11))
+	ts7500ctl -a 0x18 -w $x
+	let x=$1
+	let x="(x & 0x7ff) | 0xc000"
+	ts7500ctl -a 0x1a -w $x
+	ts7500ctl -a 0x1c -r
+}
+
+
+winpoke8x2() {
+	local x
+
+	let x=$1
+	x=$((x >> 11))
+	ts7500ctl -a 0x18 -w $x
+	let x=$1
+	let x="(x & 0x7ff) | 0x1800"
+	ts7500ctl -a 0x1a -w $x
+	ts7500ctl -a 0x1e -w $2
+}
+
+
+winpeek8x2() {
+	local x
+
+	let x=$1
+	x=$((x >> 11))
+	ts7500ctl -a 0x18 -w $x
+	let x=$1
+	let x="(x & 0x7ff) | 0x1800"
+	ts7500ctl -a 0x1a -w $x
+	ts7500ctl -a 0x1e -r
+}

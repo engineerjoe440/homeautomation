@@ -12,6 +12,9 @@ import os
 from time import sleep as wait
 from ts7500 import * # Import control functions for TS7500
 
+# Allow script to turn lights off?
+turnoff = False
+
 prsnt = False
 phone = "192.168.1.30"
 dly = 30
@@ -32,7 +35,8 @@ while(True):
 	# Reset RLY-1 if phone leaves but still counted present
 	elif( prsnt == True and response != 0 ):
 		# Clear RLY-1
-		rly_set( RELAY[1], 0 )
+		if turnoff:
+			rly_set( RELAY[1], 0 )
 		# Change present status
 		prsnt = False
 		# Set polling period

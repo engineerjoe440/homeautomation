@@ -9,8 +9,11 @@
      ## this should be started with
      # nohup /usr/local/bin/yourdaemon &
 	 # Phone-Detector Start
-	 echo "Starting Phone-Detector"
+	 echo "Starting Phone-Detector."
 	 nohup python /home/homeautomation/phone_ping.py >/home/ping.txt 2>&1 &
+	 # Direct Control Startup
+	 echo "Starting DIO Input Control."
+	 nohup python /home/homeautomation/direct_input.py >/home/DIO.txt 2>&1 &
      # Web-Server Start
      echo "Starting Home Automation Web Server..."
      python /home/homeautomation/manage.py runserver 192.168.1.15:80
