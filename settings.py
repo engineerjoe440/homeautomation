@@ -38,30 +38,32 @@ file_obj.close()
 
 # Display Unauthorized Access Warning Page
 def warning():
-	warnhtml = render_to_string('warning.html') # Render Warning HTML page
-	print("WARNING: Unauthorized or erroneous access attempt!")
-	return(HttpResponse(warnhtml))
+    warnhtml = render_to_string('warning.html') # Render Warning HTML page
+    print("WARNING: Unauthorized or erroneous access attempt!")
+    return(HttpResponse(warnhtml))
 
 # Main Web Interaction Function
 def home(request):
-	if ( request.method == 'POST' ):
-		# POST method is being used!
-		if 'B1' in request.POST:
-			rly_toggle( RELAY[1] )
-		elif 'B2' in request.POST:
-			rly_toggle( RELAY[2] )
-		elif 'B3' in request.POST:
-			rly_toggle( RELAY[3] )
-		else:
-			# Unauthorized Access Attempt - Faulty POST
-			return( warning() )
-	elif(request.method == 'GET' ):
-		if(request.GET.urlencode() != ''):
-			return( warning() )
-	r1, r2, r3 = rly_parse() # Retrieve new status
-	html = render_to_string('homauto.html', {'B1name': btn1, 'R1sta': r1,
-	'B2name': btn2, 'R2sta': r2, 'B3name': btn3, 'R3sta': r3}) # Render main HTML
-	return HttpResponse(html)
+    if ( request.method == 'POST' ):
+        # POST method is being used!
+        if 'B1' in request.POST:
+            rly_toggle( RELAY[1] )
+        elif 'B2' in request.POST:
+            rly_toggle( RELAY[2] )
+        elif 'B3' in request.POST:
+            rly_toggle( RELAY[3] )
+        elif 'B4' in request.POST:
+            os.system("reboot")
+        else:
+            # Unauthorized Access Attempt - Faulty POST
+            return( warning() )
+    elif(request.method == 'GET' ):
+        if(request.GET.urlencode() != ''):
+            return( warning() )
+    r1, r2, r3 = rly_parse() # Retrieve new status
+    html = render_to_string('homauto.html', {'B1name': btn1, 'R1sta': r1,
+    'B2name': btn2, 'R2sta': r2, 'B3name': btn3, 'R3sta': r3}) # Render main HTML
+    return HttpResponse(html)
 
 
 urlpatterns = [
