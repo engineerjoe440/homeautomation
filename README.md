@@ -1,4 +1,4 @@
-## Todo:
+# Stanley Solutions Simple Home Automation
 
-- Add Phone Detection with Domoticz:  https://www.domoticz.com/wiki/Presence_detection
-- Remove old `junk` files and folders
+- Bottle System is Modern Implementation
+- Django System is Depricated

@@ -16,7 +16,8 @@
 	 nohup python /home/homeautomation/direct_input.py >/home/DIO.txt 2>&1 &
      # Web-Server Start
      echo "Starting Home Automation Web Server..."
-     python /home/homeautomation/manage.py runserver 192.168.1.15:80
+     #python /home/homeautomation/manage.py runserver 192.168.1.15:80
+     python /home/homeautomation/webapp.py
      echo "(!) Server Closed!"
      ;;
    stop)
