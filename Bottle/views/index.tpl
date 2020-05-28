@@ -2,10 +2,12 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="/static/SSLogo.svg">
 <style>
 body {
   background-image: url(/static/circuitboard.png);
-  height: 500px; /* You must set a specified height */
+  height: 100%; /* You must set a specified height */
+  margin: 0;
   background-position: center; /* Center the image */
   background-repeat: no-repeat; /* Do not repeat the image */
   background-size: cover; /* Resize the background image to cover the entire container */
@@ -36,28 +38,37 @@ body {
 </head>
 <body>
 
+<div class="bg">
+
 <h2 align="center"><font size="8"><p style="color:white;text-shadow: -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black, 1px 1px 0 black;">Stanley Solutions</p></font></h2>
 
-<form align="center" action="/api/1">
+<form align="center" action="/api/1home">
 <p style="color:white;text-shadow: -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black, 1px 1px 0 black;"><input type="submit" name="B1" class="button" value={{ button1Name }}>
 <b>&emsp; {{ relay1Status }}</b></p>
 </form>
 
-<form align="center" action="/api/2">
+<form align="center" action="/api/2home">
 <p style="color:white;text-shadow: -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black, 1px 1px 0 black;"><input type="submit" name="B2" class="button" value={{ button2Name }}>
 <b>&emsp; {{ relay2Status }}</b></p>
 </form>
 
-<form align="center" action="/api/3">
+<form align="center" action="/api/3home">
 <p style="color:white;text-shadow: -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black, 1px 1px 0 black;"><input type="submit" name="B3" class="button" value={{ button3Name }}>
 <b>&emsp; {{ relay3Status }}</b></p>
 </form>
 <h2 align="center"><font size="8"><p style="color:white;text-shadow: -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black, 1px 1px 0 black;">Simple Home Automation</p></font></h2>
-</body>
 
-<form align="center" action="/api/reboot">
+<form align="center" action="/api/reboothome">
 <p style="color:white;text-shadow: -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black, 1px 1px 0 black;"><input type="submit" name="B4" class="button" value="Reboot">
 </p>
 </form>
+
+</div>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
 
 </html>

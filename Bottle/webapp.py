@@ -36,6 +36,10 @@ def static_server(filename):
 # Define API Endpoint Handler
 @route('/api/<op>')
 def api(op):
+    # Remove Redirect Command
+    if op.endswith('home'):
+        op = op.replace('home','')
+        go_home = True
     # Test if Integer
     if op.isdigit():
         # Switch on Integer
@@ -50,7 +54,10 @@ def api(op):
         os.system("reboot")
     
     # Redirect to Main Webpage
-    redirect('/')
+    if go_home:
+        redirect('/')
+    else:
+        return rly_parse()
 
 # Define Main Web Endpoint
 @route('/')
@@ -77,6 +84,10 @@ def error404(error):
 
 
 # Run Application
-run(host='0.0.0.0', port=80)
+try:
+    run(host='0.0.0.0', port=80)
+except:
+    print "Failing over to Port 8080"
+    run(host='0.0.0.0', port=8080)
 
 # END
