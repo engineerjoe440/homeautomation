@@ -1,0 +1,39 @@
+- id: holiday_lights_on
+  alias: Holiday Lights Turn On
+  trigger:
+  - platform: sun
+    event: sunset
+    offset: -01:00:00
+  action:
+    service: homeassistant.turn_on
+    entity_id: switch.outdoor_holiday_lights
+- id: holiday_lights_off
+  alias: Holiday Lights Turn Off
+  trigger:
+    platform: time
+    at: '23:00:00'
+  action:
+    service: homeassistant.turn_off
+    entity_id: switch.outdoor_holiday_lights
+- id: back_porch_light_on_when_away
+  alias: Back Porch Light On when Away
+  trigger:
+  - event: sunset
+    offset: +00:15:00
+    platform: sun
+  condition:
+  - condition: state
+    entity_id: device_tracker.joes_iphone
+    state: not_home
+  action:
+  - entity_id: switch.back_porch_light
+    service: homeassistant.turn_on
+  mode: single
+- id: back_porch_light_off_at_2pm
+  alias: Back Porch Light Off at 2PM
+  trigger:
+    platform: time
+    at: 02:00:00
+  action:
+    service: homeassistant.turn_off
+    entity_id: switch.back_porch_light
